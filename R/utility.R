@@ -3,6 +3,9 @@ library(scTenifoldNet)
 library(ggplot2)
 library(statsExpressions)
 library(patchwork)
+library(irlba)
+library(rCUR) 
+library(RSpectra)
 
 ##############################################################
 ################## Basic try #################################
@@ -151,28 +154,49 @@ runHAc_v1 <- function(gKO){
 }
 
 ## Try CUR
-runHAc_v2 <- function(gKO, n_rand){
-  WT <- countMatrix
+# gKO: The gene to be removed
+# k: Truncated SVD
+# n_rand: Number of tries
+# n_rand_c: Number of column to be selected
+# n_rand_r: Number of row to be selected
+
+CUR_fun <- function(mat, gKO, k, n_rand, n_rand_c, n_rand_r){
+  mat_svd <- irlba(mat, nv = k)
+  result_out <- list()
+  result_sum <- 0
+  for (i in 1:n_rand){
+    CUR_res <- CUR(A = mat, c = n_rand_c, r = n_rand_r, sv = mat_svd)
+    C <- CUR_res@C
+    C[gKO, ] <- 0
+    # C[, gKO] <- 0
+    KT <- C %*% CUR_res@U %*% CUR_res@R
+    result_out[[i]] <- KT
+    result_sum <- result_sum + KT
+  }
+  result_sum <- result_sum / n_rand
+  result_out[[n_rand + 1]] <-  result_sum
+  return(result_out)
+}
+
+runHAc_v2 <- function(mat, gKO, n_rand, n_rand_c, n_rand_r, k){
+  WT <- mat
   set.seed(1)
   WT <- makeNetworks(WT, nComp = 3, q = 0.8)
   set.seed(1)
   WT <- tensorDecomposition(WT)
   A <- WT$X
-  library(RSpectra)
-  SVD <- RSpectra::svds(A, k = 5)
-  library(rCUR)
+  A <- as.matrix(A)
+  SVD <- RSpectra::svds(A, k = k)
   set.seed(1)
-  curOutput <- rCUR::CUR(as.matrix(WT$X), sv = SVD)
-  curOutput <- rCUR::CUR(as.matrix(WT$X), sv = SVD, c = n_rand, r = n_rand)
-  curOutput@C[gKO,] <- 0 
-  B <- curOutput@C %*% curOutput@U %*% curOutput@R
+  curOutput <- CUR_fun(mat = A, gKO = gKO, k = k, n_rand = n_rand, n_rand_c = n_rand_c, n_rand_r = n_rand_r)
+  B <- curOutput[[n_rand + 1]]
   colnames(B) <- colnames(A)
   rownames(B) <- rownames(A)
   set.seed(1)
   mA <- manifoldAlignment(A,B, d = 5)
   dR <- dRegulation(mA, minFC = 0)
   dR <- dR[paste(1:10),]
-  return(dR)  
+  return(list("dR" = dR, "network" = curOutput))
 }
 
 ##########################################################

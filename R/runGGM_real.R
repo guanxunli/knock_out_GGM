@@ -5,9 +5,9 @@ library(RSpectra)
 
 load('dataset/KO_real.RData')
 WT <- as.matrix(real$tensorNetworks$X)
-WT_svd <- svds(WT, k = 100)
+# WT_svd <- svds(WT, k = 100)
 
-source('/R/utility.R')
+source('R/utility.R')
 gKO <- which(rownames(WT) %in% 'Nkx2-1')
 
 ##################################################
@@ -19,7 +19,8 @@ curKO_ori <- WT
 curKO_ori[gKO,] <- 0
 
 set.seed(1234)
-curKO_rand <- CUR(WT, c = 100, r = 100, sv = WT_svd)
+WT_svd <- irlba(WT, nv = 5)
+curKO_rand <- CUR(WT, sv = WT_svd)
 C <- curKO_rand@C
 C[gKO,] <- 0
 curKO_rand <- C %*% curKO_rand@U %*% curKO_rand@R

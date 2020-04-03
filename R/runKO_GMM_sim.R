@@ -65,7 +65,7 @@ for(gKO in c(1,7)){
   print(D[order(D$A), ])
   
   print("CUR decomposition random, remove gene ", gKO)
-  HAc <- runHAc_v2(gKO = gKO)
+  HAc <- runHAc_v2(mat = countMatrix, gKO = gKO, n_rand = 100, n_rand_c = 5, n_rand_r = 5, k = 5)[[1]]
   D <- test_fun(H0r, HAc)
   print(D[order(D$A), ])
   
