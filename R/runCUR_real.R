@@ -5,17 +5,37 @@ library(rCUR)
 
 load('dataset/KO_real.RData')
 WT <- as.matrix(real$tensorNetworks$X)
-# WT_svd <- svds(WT, k = 100)
 
-source('R/utility.R')
+## read function and parameters
+Args <- commandArgs()
+k = as.numeric(Args[6])
+n_rand = as.numeric(Args[7])
+n_rand_c = as.numeric(Args[8])
+n_rand_r = as.numeric(Args[9])
+print(k)
+print(n_rand_r)
+
+## Do svd
+print("Do svd.")
+WT_svd <- irlba(WT, nv = k)
+
+
+# source('R/utility.R')
 gKO <- which(rownames(WT) %in% 'Nkx2-1')
 
-CUR_fun <- function(mat, gKO, k, n_rand, n_rand_c, n_rand_r){
-  mat_svd <- irlba(mat, nv = k)
+## CUR original
+CUR_ave_ori <- WT
+CUR_ave_ori[gKO, ] <- 0
+glist_cur_ori <- read.table("results/genelist/gList_cur_ori.txt")
+glist_cur_ori <- glist_cur_ori$x
+length(glist_cur_ori)
+
+## CUR function
+CUR_fun <- function(mat, mat_svd, gKO, k, n_rand, n_rand_c, n_rand_r){
   result_out <- list()
   result_sum <- 0
   for (i in 1:n_rand){
-    CUR_res <- CUR(A = mat, c = n_rand_c, r = n_rand_r, sv = mat_svd)
+    CUR_res <- CUR(A = mat, c = n_rand_c, r = n_rand_r, sv = mat_svd, method = "exact.num.random")
     C <- CUR_res@C
     C[gKO, ] <- 0
     # C[, gKO] <- 0
@@ -28,17 +48,134 @@ CUR_fun <- function(mat, gKO, k, n_rand, n_rand_c, n_rand_r){
   return(result_out)
 }
 
-k <- 5
-n_rand <- 100
-n_rand_c <- 10
-n_rand_d <- 10
+# run CUR function
+print("run CUR function.")
+CUR_res <- CUR_fun(mat = WT, mat_svd = WT_svd, gKO = gKO, k = k, n_rand = n_rand, 
+                   n_rand_c = n_rand_c, n_rand_r = n_rand_r)
 
-CUR_res <- CUR_fun(mat = WT, gKO = gKO, k = k, n_rand = n_rand, n_rand_c = n_rand_c, n_rand_r = n_rand_d)
-CUR_ave <- CUR_res[[n_rand + 1]]
+# save results
+CUR_ave <- as.matrix(CUR_res[[n_rand + 1]])
 colnames(CUR_ave) <- colnames(WT)
 rownames(CUR_ave) <- rownames(WT)
+saveRDS(CUR_ave, paste0("../results/CUR_ave_", k, "_", n_rand, "_", n_rand_c, ".rds"))
 
+CUR_var <- matrix(0, nrow = nrow(CUR_ave), ncol = ncol(CUR_ave))
+for (i in 1:n_rand){
+  tmp <- as.matrix(CUR_res[[i]])
+  CUR_var <- CUR_var + (tmp - CUR_ave)^2
+}
+CUR_var <- CUR_var / n_rand
+saveRDS(CUR_var, paste0("../results/CUR_var_", k, "_", n_rand, "_", n_rand_c, ".rds"))
+
+## run manifoldAlignment
+print("Do manifold Alignment.")
 cur_mA <- manifoldAlignment(WT, CUR_ave)
 cur_DR <- dRegulation(cur_mA, minFC = 0)
-
 save.image(paste0("CUR_real_", k, "_", n_rand_c, "_.Rdata"))
+
+####################################
+########## Analysis results ########
+####################################
+
+## 3_100_50
+CUR_ave_3_100_50 <- readRDS("results/CUR_ave_3_100_50.rds")
+sum((CUR_ave_3_100_50 - CUR_ave_ori)^2)
+
+CUR_var_3_100_50 <- readRDS("results/CUR_var_3_100_50.rds")
+range(CUR_var_3_100_50)
+
+CUR_DR_3_100_50 <- readRDS("results/cur_DR_3_100_50.rds")
+gList_cur_3_100_50 <- CUR_DR_3_100_50$gene[CUR_DR_3_100_50$p.value < 0.05]
+length(gList_cur_3_100_50)
+length(intersect(gList_cur_3_100_50, glist_cur_ori))
+
+## 5_100_50
+CUR_ave_5_100_50 <- readRDS("results/CUR_ave_5_100_50.rds")
+sum((CUR_ave_5_100_50 - CUR_ave_ori)^2)
+sum((CUR_ave_5_100_50 - CUR_ave_3_100_50)^2)
+
+CUR_var_5_100_50 <- readRDS("results/CUR_var_5_100_50.rds")
+range(CUR_var_5_100_50)
+
+CUR_DR_5_100_50 <- readRDS("results/cur_DR_5_100_50.rds")
+gList_cur_5_100_50 <- CUR_DR_5_100_50$gene[CUR_DR_5_100_50$p.value < 0.05]
+length(intersect(gList_cur_5_100_50, glist_cur_ori))
+length(intersect(gList_cur_5_100_50, gList_cur_3_100_50))
+length(gList_cur_5_100_50)
+
+## 10_100_50
+CUR_ave_10_100_50 <- readRDS("results/CUR_ave_10_100_50.rds")
+sum((CUR_ave_10_100_50 - CUR_ave_ori)^2)
+sum((CUR_ave_10_100_50 - CUR_ave_3_100_50)^2)
+sum((CUR_ave_10_100_50 - CUR_ave_5_100_50)^2)
+
+CUR_var_10_100_50 <- readRDS("results/CUR_var_10_100_50.rds")
+range(CUR_var_10_100_50)
+
+CUR_DR_10_100_50 <- readRDS("results/cur_DR_10_100_50.rds")
+gList_cur_10_100_50 <- CUR_DR_10_100_50$gene[CUR_DR_10_100_50$p.value < 0.05]
+length(intersect(gList_cur_10_100_50, glist_cur_ori))
+length(intersect(gList_cur_10_100_50, gList_cur_3_100_50))
+length(intersect(gList_cur_10_100_50, gList_cur_5_100_50))
+length(gList_cur_10_100_50)
+
+## 3_100_100
+CUR_ave_3_100_100 <- readRDS("results/CUR_ave_3_100_100.rds")
+sum((CUR_ave_3_100_100 - CUR_ave_ori)^2)
+sum((CUR_ave_3_100_100 - CUR_ave_3_100_50)^2)
+sum((CUR_ave_3_100_100 - CUR_ave_5_100_50)^2)
+sum((CUR_ave_3_100_100 - CUR_ave_10_100_50)^2)
+
+CUR_var_3_100_100 <- readRDS("results/CUR_var_3_100_100.rds")
+range(CUR_var_3_100_100)
+
+CUR_DR_3_100_100 <- readRDS("results/cur_DR_3_100_100.rds")
+gList_cur_3_100_100 <- CUR_DR_3_100_100$gene[CUR_DR_3_100_100$p.value < 0.05]
+length(intersect(gList_cur_3_100_100, glist_cur_ori))
+length(intersect(gList_cur_3_100_100, gList_cur_3_100_50))
+length(intersect(gList_cur_3_100_100, gList_cur_5_100_50))
+length(intersect(gList_cur_3_100_100, gList_cur_10_100_50))
+length(gList_cur_3_100_100)
+
+## 5_100_100
+CUR_ave_5_100_100 <- readRDS("results/CUR_ave_5_100_100.rds")
+sum((CUR_ave_5_100_100 - CUR_ave_ori)^2)
+sum((CUR_ave_5_100_100 - CUR_ave_3_100_50)^2)
+sum((CUR_ave_5_100_100 - CUR_ave_5_100_50)^2)
+sum((CUR_ave_5_100_100 - CUR_ave_10_100_50)^2)
+sum((CUR_ave_5_100_100 - CUR_ave_3_100_100)^2)
+
+CUR_var_5_100_100 <- readRDS("results/CUR_var_5_100_100.rds")
+range(CUR_var_5_100_100)
+
+CUR_DR_5_100_100 <- readRDS("results/cur_DR_5_100_100.rds")
+gList_cur_5_100_100 <- CUR_DR_5_100_100$gene[CUR_DR_5_100_100$p.value < 0.05]
+length(intersect(gList_cur_5_100_100, glist_cur_ori))
+length(intersect(gList_cur_5_100_100, gList_cur_3_100_50))
+length(intersect(gList_cur_5_100_100, gList_cur_5_100_50))
+length(intersect(gList_cur_5_100_100, gList_cur_10_100_50))
+length(intersect(gList_cur_5_100_100, gList_cur_3_100_100))
+length(gList_cur_5_100_100)
+
+## 10_100_100
+CUR_ave_10_100_100 <- readRDS("results/CUR_ave_10_100_100.rds")
+sum((CUR_ave_10_100_100 - CUR_ave_ori)^2)
+sum((CUR_ave_10_100_100 - CUR_ave_3_100_50)^2)
+sum((CUR_ave_10_100_100 - CUR_ave_5_100_50)^2)
+sum((CUR_ave_10_100_100 - CUR_ave_10_100_50)^2)
+sum((CUR_ave_10_100_100 - CUR_ave_3_100_100)^2)
+sum((CUR_ave_10_100_100 - CUR_ave_5_100_100)^2)
+
+CUR_var_10_100_100 <- readRDS("results/CUR_var_10_100_100.rds")
+range(CUR_var_10_100_100)
+
+CUR_DR_10_100_100 <- readRDS("results/cur_DR_10_100_100.rds")
+gList_cur_10_100_100 <- CUR_DR_10_100_100$gene[CUR_DR_10_100_100$p.value < 0.05]
+length(intersect(gList_cur_10_100_100, glist_cur_ori))
+length(intersect(gList_cur_10_100_100, gList_cur_3_100_50))
+length(intersect(gList_cur_10_100_100, gList_cur_5_100_50))
+length(intersect(gList_cur_10_100_100, gList_cur_10_100_50))
+length(intersect(gList_cur_10_100_100, gList_cur_3_100_100))
+length(intersect(gList_cur_10_100_100, gList_cur_5_100_100))
+length(gList_cur_10_100_100)
+
