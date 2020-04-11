@@ -43,6 +43,30 @@ test_fun <- function(A, B){
   return(D)
 }
 
+test_fun2 <- function(A, B, gKO){
+  
+  n <- nrow(A)
+  index <- 1:10
+  index <- index[-gKO]
+  
+  A <- A[index, ]
+  B <- B[1:9, ]
+  
+  D <- reshape2::melt(list(WTvsWT = A$distance, WTvsKO = B$distance))
+  D$Gene <- paste0('G', index)
+  # D$Cluster <- c(rep('C1',6), rep('C2',3))
+  colnames(D) <- c('Distance', 'Model', 'Gene')
+  D$Gene <- factor(D$Gene, levels = paste0('G', index))
+  D <- D[D$Model == 'WTvsKO',]
+  D$FC <- B$FC
+  D$Z <- scale(D$Distance)
+  R <- sapply(seq_len(1e3), function(X){mean(sample(D$Z, replace = TRUE))})
+  D$P <- sapply(D$Z, function(X){mean(R > X)})
+  D$A <- p.adjust(D$P, method = 'fdr')
+  D <- D[order(D$A, decreasing = TRUE), ]
+  return(D)
+}
+
 for(gKO in c(1,7)){
   print("Knock out at beginning, remove gene ", gKO)
   HAr <- runHA(gKO = gKO)
@@ -59,18 +83,18 @@ for(gKO in c(1,7)){
   # D <- test_fun(H0r, HAm)
   # print(D[order(D$A), ])
   # 
-  print("CUR decomposition original, remove gene ", gKO)
-  HAc <- runHAc_v1(gKO = gKO)
-  D <- test_fun(H0r, HAc)
-  print(D[order(D$A), ])
-  
-  print("CUR decomposition random, remove gene ", gKO)
-  HAc <- runHAc_v2(mat = countMatrix, gKO = gKO, n_rand = 100, n_rand_c = 5, n_rand_r = 5, k = 5)[[1]]
-  D <- test_fun(H0r, HAc)
-  print(D[order(D$A), ])
+  # print("CUR decomposition original, remove gene ", gKO)
+  # HAc <- runHAc_v1(gKO = gKO)
+  # D <- test_fun(H0r, HAc)
+  # print(D[order(D$A), ])
+  # 
+  # print("CUR decomposition random, remove gene ", gKO)
+  # HAc <- runHAc_v2(mat = countMatrix, gKO = gKO, n_rand = 100, n_rand_c = 5, n_rand_r = 5, k = 5)[[1]]
+  # D <- test_fun(H0r, HAc)
+  # print(D[order(D$A), ])
   
   print("GGM model w_ij = k_ij, remove gene ", gKO)
-  Hggm1 <- runGGM_v1(gKO = gKO)
+  Hggm1 <- runGGM_v1(gKO = gKO, diag_net = "max")
   D <- test_fun(H0r, Hggm1)
   print(D[order(D$A), ])
   
@@ -81,8 +105,10 @@ for(gKO in c(1,7)){
   
   print("GGM model w_ij = beta_ij, remove gene ", gKO)
   Hggm3 <- runGGM_v3(gKO = gKO)
-  D <- test_fun(H0r, Hggm3)
-  print(D[order(D$A), ])
+  D1 <- test_fun(H0r, Hggm3)
+  print(D1[order(D1$A), ])
+  D2 <- test_fun2(H0r, Hggm3, gKO = 1)
+  print(D2[order(D2$A), ])
 }
 
 source("R/scTenifold_subsample_ggm.R")

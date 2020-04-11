@@ -207,14 +207,9 @@ runHAc_v2 <- function(mat, gKO, n_rand, n_rand_c, n_rand_r, k){
 GGM_v1 <- function(net_mat, index_rm){
   
   n <- nrow(net_mat)
-  if (index_rm == 1){
-    per_net_mat <- net_mat
-  } else if(index_rm == n){
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1)), c(index_rm, 1:(index_rm - 1))]
-  } else{
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1), (index_rm + 1):n),
-                           c(index_rm, 1:(index_rm - 1), (index_rm + 1):n)]
-  }
+  index_per <- 1:n
+  index_per <- c(index_rm, index_per[-index_rm])
+  per_net_mat <- net_mat[index_per, index_per]
   
   ## get inverse of submatrix
   q11 <- per_net_mat[1, 1]
@@ -246,7 +241,7 @@ GGM_v2 <- function(net_mat, index_rm){
   }
   
   ## get inverse of submatrix
-  q11 <- per_net_mat[1, 1]
+  # q11 <- per_net_mat[1, 1]
   q1 <- per_net_mat[1, -1]
   q1t <- per_net_mat[-1, 1]
   
@@ -254,7 +249,8 @@ GGM_v2 <- function(net_mat, index_rm){
   tmp <- q1 * q1t
   fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE) -
     matrix(tmp, nrow = n - 1, ncol = n - 1) + tcrossprod(tmp, tmp)
-  net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/sqrt(fact_mat)
+  # net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/sqrt(fact_mat)
+  net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1))/sqrt(fact_mat)
   
   ## add matrix names
   if (is.null(rownames(net_mat))){
@@ -303,7 +299,7 @@ GGM_v3 <- function(net_mat, index_rm){
 
 
 ## run GGM model with w_ij as k_ij
-runGGM_v1 <- function(gKO){
+runGGM_v1 <- function(gKO, diag_k = 1){
   WT <- countMatrix
   # Networks
   set.seed(1)
@@ -313,15 +309,27 @@ runGGM_v1 <- function(gKO){
   set.seed(1)
   WT <- tensorDecomposition(WT)
   WT <- as.matrix(WT$X)
-  diag(WT) <- 1
-  # Your code
+  
+  if (diag_k == 1){
+    diag(WT) <- 1
+  } else if(diag_k == "max"){
+    max_c <- apply(WT, 2, max)
+    max_r <- apply(WT, 1, max)
+    max_index <- cbind(max_c, max_r)
+    diag(WT) <- apply(max_index, 1, max)
+  }
+  
+  # GGM
   index <- which(rownames(WT) %in% paste0('G',gKO))
   temp <- GGM_v1(as.matrix(WT), index)
   
-  KO <- WT
-  KO[KO != 0] <- 0
-  diag(KO) <- 1
+  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
+  rownames(KO) <- rownames(WT)
+  colnames(KO) <- colnames(WT)
+  diag(KO) <- diag(WT)
   KO[rownames(temp), colnames(temp)] <- temp
+  KO[index, ] <- 0
+  KO[, index] <- 0
   
   set.seed(1)
   mA <- manifoldAlignment(WT,KO, d = 5)
@@ -343,17 +351,20 @@ runGGM_v2 <- function(gKO){
   set.seed(1)
   WT <- tensorDecomposition(WT)
   WT <- as.matrix(WT$X)
-  diag(WT) <- 1
+  diag(WT) <- 0
   # Your code
   WT <- (WT + t(WT))/2
   
   index <- which(rownames(WT) %in% paste0('G',gKO))
   temp <- GGM_v2(as.matrix(WT), index)
   
-  KO <- WT
-  KO[KO != 0] <- 0
-  diag(KO) <- 1
+  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
+  rownames(KO) <- rownames(WT)
+  colnames(KO) <- colnames(WT)
+  diag(KO) <- diag(WT)
   KO[rownames(temp), colnames(temp)] <- temp
+  KO[index, ] <- 0
+  KO[, index] <- 0
   
   set.seed(1)
   mA <- manifoldAlignment(WT,KO, d = 5)
@@ -375,18 +386,19 @@ runGGM_v3 <- function(gKO){
   set.seed(1)
   WT <- tensorDecomposition(WT)
   WT <- as.matrix(WT$X)
-  # diag(WT) <- 1
+  # diag(WT) <- 0
   # Your code
   index <- which(rownames(WT) %in% paste0('G',gKO))
   temp <- GGM_v3(as.matrix(WT), index)
   
-  KO <- WT
-  KO[KO != 0] <- 0
-  KO[rownames(temp), colnames(temp)] <- temp
+  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
+  rownames(KO) <- rownames(WT)
+  colnames(KO) <- colnames(WT)
   diag(KO) <- diag(WT)
-  KO[gKO, gKO] <- 0
-  KO <- round(KO, 1)
-  
+  KO[rownames(temp), colnames(temp)] <- temp
+  KO[index, ] <- 0
+  KO[, index] <- 0
+  # KO <- KO[rownames(temp), colnames(temp)]
   
   set.seed(1)
   mA <- manifoldAlignment(WT,KO, d = 5)
