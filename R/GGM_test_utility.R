@@ -71,7 +71,7 @@ GGM_net <- function(count_mat, method = "gaussian", normlize = "TRUE", tk_qua = 
   return(net_work)
 }
 
-## Gaussian graphical model set w_ij as k_ij (should be symmetric)
+## GGM net
 GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
   
   n <- nrow(net_mat)
@@ -90,11 +90,11 @@ GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
     tmp <- q1 * q1t
     fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE) -
       matrix(tmp, nrow = n - 1, ncol = n - 1) + tcrossprod(tmp, tmp)
-    net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/sqrt(fact_mat)
+    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/sqrt(fact_mat)
   } else if(wij == "bij"){
     tmp <- q1 * q1t
     fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE)
-    net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/fact_mat
+    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/fact_mat
   }
   
   if (symme == "TRUE"){

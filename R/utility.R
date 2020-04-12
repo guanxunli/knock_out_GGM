@@ -203,8 +203,8 @@ runHAc_v2 <- function(mat, gKO, n_rand, n_rand_c, n_rand_r, k){
 ################# GGM ####################################
 ##########################################################
 
-## Gaussian graphical model set w_ij as k_ij (should be symmetric)
-GGM_v1 <- function(net_mat, index_rm){
+## GGM net
+GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
   
   n <- nrow(net_mat)
   index_per <- 1:n
@@ -215,76 +215,23 @@ GGM_v1 <- function(net_mat, index_rm){
   q11 <- per_net_mat[1, 1]
   q1 <- per_net_mat[1, -1]
   q1t <- per_net_mat[-1, 1]
-  net_mat_inv <- per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1)/q11
   
-  ## add matrix names
-  if (is.null(rownames(net_mat))){
-    return(net_mat_inv)
-  } else{
-    name_mat <- rownames(net_mat)
-    rownames(net_mat_inv) <- name_mat[-index_rm]
-    colnames(net_mat_inv) <- name_mat[-index_rm]
-    return(net_mat_inv)
-  }
-}
-
-## Gaussian graphical set w_ij as c_ij
-GGM_v2 <- function(net_mat, index_rm){
-  n <- nrow(net_mat)
-  if (index_rm == 1){
-    per_net_mat <- net_mat
-  } else if(index_rm == n){
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1)), c(index_rm, 1:(index_rm - 1))]
-  } else{
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1), (index_rm + 1):n),
-                           c(index_rm, 1:(index_rm - 1), (index_rm + 1):n)]
+  if(wij == "kij"){
+    net_mat_inv <- per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1)/q11
+  } else if(wij == "cij"){
+    tmp <- q1 * q1t
+    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE) -
+      matrix(tmp, nrow = n - 1, ncol = n - 1) + tcrossprod(tmp, tmp)
+    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/sqrt(fact_mat)
+  } else if(wij == "bij"){
+    tmp <- q1 * q1t
+    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE)
+    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/fact_mat
   }
   
-  ## get inverse of submatrix
-  # q11 <- per_net_mat[1, 1]
-  q1 <- per_net_mat[1, -1]
-  q1t <- per_net_mat[-1, 1]
-  
-  ## calculate factor
-  tmp <- q1 * q1t
-  fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE) -
-    matrix(tmp, nrow = n - 1, ncol = n - 1) + tcrossprod(tmp, tmp)
-  # net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/sqrt(fact_mat)
-  net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1))/sqrt(fact_mat)
-  
-  ## add matrix names
-  if (is.null(rownames(net_mat))){
-    return(net_mat_inv)
-  } else{
-    name_mat <- rownames(net_mat)
-    rownames(net_mat_inv) <- name_mat[-index_rm]
-    colnames(net_mat_inv) <- name_mat[-index_rm]
-    return(net_mat_inv)
+  if (symme == "TRUE"){
+    net_mat_inv <- (net_mat_inv + t(net_mat_inv))/2
   }
-}
-
-## Gaussian graphical set w_ij as beta_ij
-GGM_v3 <- function(net_mat, index_rm){
-  n <- nrow(net_mat)
-  if (index_rm == 1){
-    per_net_mat <- net_mat
-  } else if(index_rm == n){
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1)), c(index_rm, 1:(index_rm - 1))]
-  } else{
-    per_net_mat <- net_mat[c(index_rm, 1:(index_rm - 1), (index_rm + 1):n),
-                           c(index_rm, 1:(index_rm - 1), (index_rm + 1):n)]
-  }
-  
-  ## get inverse of submatrix
-  # q11 <- per_net_mat[1, 1]
-  q1 <- per_net_mat[1, -1]
-  q1t <- per_net_mat[-1, 1]
-  
-  ## calculate factor
-  tmp <- q1 * q1t
-  fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE)
-  # net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1)/q11)/fact_mat
-  net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1))/fact_mat
   
   ## add matrix names
   if (is.null(rownames(net_mat))){
@@ -299,107 +246,50 @@ GGM_v3 <- function(net_mat, index_rm){
 
 
 ## run GGM model with w_ij as k_ij
-runGGM_v1 <- function(gKO, diag_k = 1){
-  WT <- countMatrix
-  # Networks
+runGGM <- function(net_mat, gKO, diag_net = "max", wij = "kij", symme = "TRUE", rm0 = "FALSE"){
+  
+  WT <- net_mat
   set.seed(1)
   WT <- makeNetworks(WT, nComp = 3, q = 0.8)
-  
-  # Tensor
   set.seed(1)
-  WT <- tensorDecomposition(WT)
-  WT <- as.matrix(WT$X)
+  WT <- tensorDecomposition(WT)$X
+  WT <- as.matrix(WT)
   
-  if (diag_k == 1){
+  if (symme == "TRUE"){
+    WT <- (WT + t(WT))/2
+  }
+  n <- nrow(WT)
+  
+  # set diagnoal
+  if (diag_net == 1){
     diag(WT) <- 1
-  } else if(diag_k == "max"){
-    max_c <- apply(WT, 2, max)
-    max_r <- apply(WT, 1, max)
-    max_index <- cbind(max_c, max_r)
-    diag(WT) <- apply(max_index, 1, max)
+  } else{
+    diag(WT) <- sapply(1:n, FUN = function(x){return(max(abs(c(WT[x, ], WT[, x]))))}) * 1.1
   }
   
-  # GGM
-  index <- which(rownames(WT) %in% paste0('G',gKO))
-  temp <- GGM_v1(as.matrix(WT), index)
+  # index remove
+  index_rm <- which(rownames(WT) %in% paste0('G',gKO))
+  temp <- GGM_invnet(net_mat = as.matrix(WT), index_rm = index_rm, wij = wij, symme = symme)
   
+  # getting new network
   KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
   rownames(KO) <- rownames(WT)
   colnames(KO) <- colnames(WT)
-  diag(KO) <- diag(WT)
+  
+  # setting diagnoal
+  if (wij == "bij" || wij == "cij"){
+    diag(KO) <- diag(WT)
+    # diag(KO) <- sapply(1:n, FUN = function(x){return(max(abs(c(KO[x, ], KO[, x]))))}) * 1.1
+  }
   KO[rownames(temp), colnames(temp)] <- temp
-  KO[index, ] <- 0
-  KO[, index] <- 0
+  KO[index_rm, ] <- 0
+  KO[, index_rm] <- 0
   
-  set.seed(1)
-  mA <- manifoldAlignment(WT,KO, d = 5)
+  if (rm0 =="TRUE"){
+    KO <- KO[-index_rm, -index_rm]
+  }
   
-  set.seed(1)
-  dR <- dRegulation(mA, minFC = 0)
-  dR <- dR[paste0(1:10),]
-  return(dR)
-}
-
-## run GGM model with w_ij as c_ij
-runGGM_v2 <- function(gKO){
-  WT <- countMatrix
-  # Networks
-  set.seed(1)
-  WT <- makeNetworks(WT, nComp = 3, q = 0.8)
-  
-  # Tensor
-  set.seed(1)
-  WT <- tensorDecomposition(WT)
-  WT <- as.matrix(WT$X)
-  diag(WT) <- 0
-  # Your code
-  WT <- (WT + t(WT))/2
-  
-  index <- which(rownames(WT) %in% paste0('G',gKO))
-  temp <- GGM_v2(as.matrix(WT), index)
-  
-  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
-  rownames(KO) <- rownames(WT)
-  colnames(KO) <- colnames(WT)
-  diag(KO) <- diag(WT)
-  KO[rownames(temp), colnames(temp)] <- temp
-  KO[index, ] <- 0
-  KO[, index] <- 0
-  
-  set.seed(1)
-  mA <- manifoldAlignment(WT,KO, d = 5)
-  
-  set.seed(1)
-  dR <- dRegulation(mA, minFC = 0)
-  dR <- dR[paste0(1:10),]
-  return(dR)
-}
-
-## run GGM model with w_ij as beta_ij
-runGGM_v3 <- function(gKO){
-  WT <- countMatrix
-  # Networks
-  set.seed(1)
-  WT <- makeNetworks(WT, nComp = 3, q = 0.8)
-  
-  # Tensor
-  set.seed(1)
-  WT <- tensorDecomposition(WT)
-  WT <- as.matrix(WT$X)
-  # diag(WT) <- 0
-  # Your code
-  index <- which(rownames(WT) %in% paste0('G',gKO))
-  temp <- GGM_v3(as.matrix(WT), index)
-  
-  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
-  rownames(KO) <- rownames(WT)
-  colnames(KO) <- colnames(WT)
-  diag(KO) <- diag(WT)
-  KO[rownames(temp), colnames(temp)] <- temp
-  KO[index, ] <- 0
-  KO[, index] <- 0
-  # KO <- KO[rownames(temp), colnames(temp)]
-  
+  # manifold alignment
   set.seed(1)
   mA <- manifoldAlignment(WT,KO, d = 5)
   
