@@ -7,23 +7,8 @@ load('dataset/KO_real.RData')
 WT <- as.matrix(real$tensorNetworks$X)
 # WT_svd <- svds(WT, k = 100)
 
-source('R/utility.R')
+source('R/utility_GGM.R')
 gKO <- which(rownames(WT) %in% 'Nkx2-1')
-
-##################################################
-################### CUR ##########################
-##################################################
-
-print("Do CUR")
-curKO_ori <- WT
-curKO_ori[gKO,] <- 0
-
-set.seed(1234)
-WT_svd <- irlba(WT, nv = 5)
-curKO_rand <- CUR(WT, sv = WT_svd)
-C <- curKO_rand@C
-C[gKO,] <- 0
-curKO_rand <- C %*% curKO_rand@U %*% curKO_rand@R
 
 ###############################################
 ########### GGM ###############################
@@ -32,39 +17,13 @@ curKO_rand <- C %*% curKO_rand@U %*% curKO_rand@R
 print("Do GGM")
 
 # w_ij = k_ij
-temp <- GGM_v1(WT, gKO)
-ggmKO_k <- WT
-ggmKO_k[ggmKO_k!=0] <- 0
-ggmKO_k[rownames(temp), colnames(temp)] <- temp
+ggm_DR_k <- runGGM(net_mat = WT, gKO = gKO, diag_net = "max", wij = "kij", symme = "TRUE", rm0 = "FALSE")
 
-# w_ij = c_ij
-temp <- GGM_v2(WT, gKO)
-ggmKO_c <- WT
-ggmKO_c[ggmKO_c!=0] <- 0
-ggmKO_c[rownames(temp), colnames(temp)] <- temp
+# w_ij = k_ij
+ggm_DR_c <- runGGM(net_mat = WT, gKO = gKO, diag_net = 1, wij = "cij", symme = "TRUE", rm0 = "FALSE")
 
-# w_ij = beta_ij
-temp <- GGM_v3(WT, gKO)
-ggmKO_b <- WT
-ggmKO_b[ggmKO_b!=0] <- 0
-ggmKO_b[rownames(temp), colnames(temp)] <- temp
-
-
-## manifold alignment
-print("Do alignment")
-set.seed(1)
-ggm_mA_k <- manifoldAlignment(WT, ggmKO_k)
-ggm_mA_c <- manifoldAlignment(WT, ggmKO_c)
-ggm_mA_b <- manifoldAlignment(WT, ggmKO_b)
-cur_mA_ori <- manifoldAlignment(WT, curKO_ori)
-cur_mA_rand <- manifoldAlignment(WT, curKO_rand)
-
-print("Do regulation")
-ggm_DR_k <- dRegulation(ggm_mA_k, minFC = 0)
-ggm_DR_c <- dRegulation(ggm_mA_c, minFC = 0)
-ggm_DR_b <- dRegulation(ggm_mA_b, minFC = 0)
-cur_DR_ori <- dRegulation(cur_mA_ori, minFC = 0)
-cur_DR_rand <- dRegulation(cur_mA_rand, minFC = 0)
+# w_ij = k_ij
+ggm_DR_b <- runGGM(net_mat = WT, gKO = gKO, diag_net = 1, wij = "bij", symme = "FALSE", rm0 = "FALSE")
 
 source('https://raw.githubusercontent.com/dosorio/utilities/master/singleCell/plotDR.R')
 real$diffRegulation <- dRegulation(real$manifoldAlignment, minFC = 0)
@@ -77,6 +36,7 @@ gList_ggm_b <- ggm_DR_b$gene[ggm_DR_b$p.value < 0.05]
 
 gList_cur_ori <- cur_DR_ori$gene[cur_DR_ori$p.value < 0.05]
 gList_cur_rand <- cur_DR_rand$gene[cur_DR_rand$p.value < 0.05]
+
 
 # save.image("GMM_CUR_real.Rdata")
 load("results/GMM_CUR_real.Rdata")

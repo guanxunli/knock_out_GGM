@@ -24,6 +24,8 @@ runHO <- function(WT){
 ################# GGM ####################################
 ##########################################################
 
+## construct GGM net
+
 GGM_net <- function(count_mat, method = "gaussian", normlize = "TRUE", tk_qua = NULL, tk_rd = NULL){
   n <- nrow(count_mat)
   net_work <- matrix(0, nrow = n, ncol = n)
@@ -71,7 +73,7 @@ GGM_net <- function(count_mat, method = "gaussian", normlize = "TRUE", tk_qua = 
   return(net_work)
 }
 
-## GGM net
+## GGM net after knock-out gene
 GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
   
   n <- nrow(net_mat)
@@ -93,8 +95,8 @@ GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
     net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/sqrt(fact_mat)
   } else if(wij == "bij"){
     tmp <- q1 * q1t
-    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE)
-    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/fact_mat
+    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1)
+    net_mat_inv <- (per_net_mat[2:n, 2:n] + tcrossprod(q1t, q1))/fact_mat
   }
   
   if (symme == "TRUE"){
@@ -120,6 +122,63 @@ runGGM <- function(net_mat, gKO, diag_net = "max", wij = "kij", symme = "TRUE", 
     net_mat <- (net_mat + t(net_mat))/2
   }
   WT <- net_mat
+  n <- nrow(WT)
+  
+  # set diagnoal
+  if (diag_net == 1){
+    diag(WT) <- 1
+  } else{
+    diag(WT) <- sapply(1:n, FUN = function(x){return(max(abs(c(WT[x, ], WT[, x]))))}) * 1.1
+  }
+  
+  # index remove
+  index_rm <- which(rownames(WT) %in% paste0('G',gKO))
+  temp <- GGM_invnet(net_mat = as.matrix(WT), index_rm = index_rm, wij = wij, symme = symme)
+  
+  # getting new network
+  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
+  rownames(KO) <- rownames(WT)
+  colnames(KO) <- colnames(WT)
+  
+  # setting diagnoal
+  if (wij == "bij" || wij == "cij"){
+    diag(KO) <- diag(WT)
+    # diag(KO) <- sapply(1:n, FUN = function(x){return(max(abs(c(KO[x, ], KO[, x]))))}) * 1.1
+  }
+  KO[rownames(temp), colnames(temp)] <- temp
+  KO[index_rm, ] <- 0
+  KO[, index_rm] <- 0
+  
+  if (rm0 =="TRUE"){
+    KO <- KO[-index_rm, -index_rm]
+  }
+  
+  # manifold alignment
+  set.seed(1)
+  mA <- manifoldAlignment(WT,KO, d = 5)
+  
+  set.seed(1)
+  dR <- dRegulation(mA, minFC = 0)
+  dR <- dR[paste0(1:10),]
+  return(dR)
+}
+
+############################################
+######## Modified GGm for simulation data ##
+############################################
+
+runGGM_sim <- function(net_mat, gKO, diag_net = "max", wij = "kij", symme = "TRUE", rm0 = "FALSE"){
+  
+  WT <- net_mat
+  set.seed(1)
+  WT <- makeNetworks(WT, nComp = 3, q = 0.8)
+  set.seed(1)
+  WT <- tensorDecomposition(WT)$X
+  WT <- as.matrix(WT)
+  
+  if (symme == "TRUE"){
+    WT <- (WT + t(WT))/2
+  }
   n <- nrow(WT)
   
   # set diagnoal
@@ -201,5 +260,7 @@ test_fun_rm0 <- function(A, B, gKO){
   D <- D[order(D$A, decreasing = TRUE), ]
   return(D)
 }
+
+
 
 

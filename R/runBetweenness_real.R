@@ -6,7 +6,7 @@ library(igraph)
 load('../dataset/KO_real.RData')
 WT <- as.matrix(real$tensorNetworks$X)
 
-source('../R/utility.R')
+source('R/utility_betweenness.R')
 gKO <- which(rownames(WT) %in% 'Nkx2-1')
 
 print("Do absolute value")

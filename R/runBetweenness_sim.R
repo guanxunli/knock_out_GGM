@@ -18,7 +18,7 @@ WT <- makeNetworks(WT, nComp = 3, q = 0.8)
 WT <- tensorDecomposition(WT)
 WT <- as.matrix(WT$X)
 
-source("R/utility.R")
+source("R/utility_betweenness.R")
 
 ## show the results
 for(gKO in c(1,7)){

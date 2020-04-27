@@ -199,148 +199,22 @@ runHAc_v2 <- function(mat, gKO, n_rand, n_rand_c, n_rand_r, k){
   return(list("dR" = dR, "network" = curOutput))
 }
 
-##########################################################
-################# GGM ####################################
-##########################################################
+#############################
+########## test_fun #########
+#############################
 
-## GGM net
-GGM_invnet <- function(net_mat, index_rm, wij = "kij", symme = "TRUE"){
-  
-  n <- nrow(net_mat)
-  index_per <- 1:n
-  index_per <- c(index_rm, index_per[-index_rm])
-  per_net_mat <- net_mat[index_per, index_per]
-  
-  ## get inverse of submatrix
-  q11 <- per_net_mat[1, 1]
-  q1 <- per_net_mat[1, -1]
-  q1t <- per_net_mat[-1, 1]
-  
-  if(wij == "kij"){
-    net_mat_inv <- per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1)/q11
-  } else if(wij == "cij"){
-    tmp <- q1 * q1t
-    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE) -
-      matrix(tmp, nrow = n - 1, ncol = n - 1) + tcrossprod(tmp, tmp)
-    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/sqrt(fact_mat)
-  } else if(wij == "bij"){
-    tmp <- q1 * q1t
-    fact_mat <- matrix(1, nrow = n - 1, ncol = n - 1) - matrix(tmp, nrow = n - 1, ncol = n - 1, byrow = TRUE)
-    net_mat_inv <- (per_net_mat[2:n, 2:n] - tcrossprod(q1t, q1))/fact_mat
-  }
-  
-  if (symme == "TRUE"){
-    net_mat_inv <- (net_mat_inv + t(net_mat_inv))/2
-  }
-  
-  ## add matrix names
-  if (is.null(rownames(net_mat))){
-    return(net_mat_inv)
-  } else{
-    name_mat <- rownames(net_mat)
-    rownames(net_mat_inv) <- name_mat[-index_rm]
-    colnames(net_mat_inv) <- name_mat[-index_rm]
-    return(net_mat_inv)
-  }
-}
-
-
-## run GGM model with w_ij as k_ij
-runGGM <- function(net_mat, gKO, diag_net = "max", wij = "kij", symme = "TRUE", rm0 = "FALSE"){
-  
-  WT <- net_mat
-  set.seed(1)
-  WT <- makeNetworks(WT, nComp = 3, q = 0.8)
-  set.seed(1)
-  WT <- tensorDecomposition(WT)$X
-  WT <- as.matrix(WT)
-  
-  if (symme == "TRUE"){
-    WT <- (WT + t(WT))/2
-  }
-  n <- nrow(WT)
-  
-  # set diagnoal
-  if (diag_net == 1){
-    diag(WT) <- 1
-  } else{
-    diag(WT) <- sapply(1:n, FUN = function(x){return(max(abs(c(WT[x, ], WT[, x]))))}) * 1.1
-  }
-  
-  # index remove
-  index_rm <- which(rownames(WT) %in% paste0('G',gKO))
-  temp <- GGM_invnet(net_mat = as.matrix(WT), index_rm = index_rm, wij = wij, symme = symme)
-  
-  # getting new network
-  KO <- matrix(0, nrow = nrow(WT), ncol = ncol(WT))
-  rownames(KO) <- rownames(WT)
-  colnames(KO) <- colnames(WT)
-  
-  # setting diagnoal
-  if (wij == "bij" || wij == "cij"){
-    diag(KO) <- diag(WT)
-    # diag(KO) <- sapply(1:n, FUN = function(x){return(max(abs(c(KO[x, ], KO[, x]))))}) * 1.1
-  }
-  KO[rownames(temp), colnames(temp)] <- temp
-  KO[index_rm, ] <- 0
-  KO[, index_rm] <- 0
-  
-  if (rm0 =="TRUE"){
-    KO <- KO[-index_rm, -index_rm]
-  }
-  
-  # manifold alignment
-  set.seed(1)
-  mA <- manifoldAlignment(WT,KO, d = 5)
-  
-  set.seed(1)
-  dR <- dRegulation(mA, minFC = 0)
-  dR <- dR[paste0(1:10),]
-  return(dR)
-}
-
-###########################################################
-#################### Betweenness ##########################
-###########################################################
-
-## make it positive weights
-mkpositive_fun <- function(adj_mat, KO_gene, mode = "directed", weighted = TRUE, diag = FALSE, method = "abs"){
-  
-  if (method == "abs"){
-    adj_mat <- abs(adj_mat)
-  } else{
-    adj_mat <- adj_mat + 1
-  }
-  
-  graph_WT <- graph.adjacency(adj_mat, mode = mode, weighted = weighted, diag = diag)
-  WT_betwenness <- betweenness(graph_WT, directed = (mode == "directed"))
-  WT_r_betwenness <- WT_betwenness/sum(WT_betwenness)
-  
-  KO <- adj_mat[-KO_gene, -KO_gene]
-  graph_KO <- graph.adjacency(KO, mode = mode, weighted = weighted, diag = diag)
-  KO_betwenness <- betweenness(graph_KO, directed = (mode == "directed"))
-  KO_r_betwenness <- KO_betwenness/sum(KO_betwenness)
-  
-  return(abs(WT_r_betwenness[-KO_gene] - KO_r_betwenness))
-}
-
-## remove weight infect
-rmweight_fun <- function(adj_mat, KO_gene, threshold = 0.1, mode = "undirected", weighted = NULL, diag = FALSE){
-  
-  index0 <- (abs(adj_mat) < threshold)
-  adj_mat_use <- matrix(1, nrow(adj_mat), ncol(adj_mat))
-  adj_mat_use[index0] <- 0
-  rownames(adj_mat_use) <- rownames(adj_mat)
-  colnames(adj_mat_use) <- colnames(adj_mat)
-  
-  graph_WT <- graph.adjacency(adj_mat_use, mode = mode, weighted = weighted, diag = diag)
-  WT_betwenness <- betweenness(graph_WT, directed = (mode == "directed"))
-  WT_r_betwenness <- WT_betwenness/sum(WT_betwenness)
-  
-  KO <- adj_mat_use[-KO_gene, -KO_gene]
-  graph_KO <- graph.adjacency(KO, mode = mode, weighted = weighted, diag = diag)
-  KO_betwenness <- betweenness(graph_KO, directed = (mode == "directed"))
-  KO_r_betwenness <- KO_betwenness/sum(KO_betwenness)
-  
-  return(abs(WT_r_betwenness[-KO_gene] - KO_r_betwenness))
+test_fun <- function(A, B){
+  D <- reshape2::melt(list(WTvsWT = A$distance, WTvsKO = B$distance))
+  D$Gene <- paste0('G', 1:10)
+  D$Cluster <- c(rep('C1',6), rep('C2',4))
+  colnames(D) <- c('Distance', 'Model', 'Gene', 'Cluster')
+  D$Gene <- factor(D$Gene, levels = paste0('G', 1:10))
+  D <- D[D$Model == 'WTvsKO',]
+  D$FC <- B$FC
+  D$Z <- scale(D$Distance)
+  R <- sapply(seq_len(1e3), function(X){mean(sample(D$Z, replace = TRUE))})
+  D$P <- sapply(D$Z, function(X){mean(R > X)})
+  D$A <- p.adjust(D$P, method = 'fdr')
+  D <- D[order(D$A, decreasing = TRUE), ]
+  return(D)
 }
