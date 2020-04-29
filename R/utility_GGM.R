@@ -4,6 +4,7 @@ library(ggplot2)
 library(irlba)
 library(rCUR) 
 library(RSpectra)
+library(glmnet)
 
 ##############################################################
 ################## Basic try #################################
