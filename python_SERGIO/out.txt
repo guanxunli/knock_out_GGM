@@ -1,9 +1,0 @@
-Start simulating new level
-There are 2 genes to simulate in this layer
-Done with current level
-Start simulating new level
-There are 4 genes to simulate in this layer
-Done with current level
-Start simulating new level
-There are 9 genes to simulate in this layer
-Done with current level
